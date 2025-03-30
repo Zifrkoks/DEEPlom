@@ -1,5 +1,7 @@
 import string
-from .models import Game
+
+from ViewModels import ActionUser
+from models import Game
 
 
 class Service:
@@ -8,7 +10,7 @@ class Service:
 
 
 
-    def send_action_to_AI(user_id:int,Product:Game,):
+    def send_action_to_AI(user_id:int,game_id:int,event:ActionUser):
         pass
 
 

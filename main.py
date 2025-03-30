@@ -1,21 +1,22 @@
 from datetime import timedelta
 import os
-import queue
+from random import random
 import shutil
-from typing import List
 
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, true
 from sqlalchemy.orm import sessionmaker,joinedload
 
-from .models import Base, Card, CartItem, Game, Producer, User
-from .ViewModels import AddCard, AddFields, GameCreate, GameUpdate, GetUser, ProducerView, UserAuth, UserCreate
-from fastapi import FastAPI, HTTPException, Query, Response,Security, UploadFile
+from models import Base, Card, CartItem, Game, User
+from ViewModels import ActionUser, AddCard, AddFields, GameCreate, GetUser, UserAuth, UserCreate
+from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
 
 from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
+
+from service import Service
 
 load_dotenv()
 app = FastAPI()
@@ -26,14 +27,14 @@ app.add_middleware(CORSMiddleware, allow_origins="*",
 app.mount("/images", StaticFiles(directory="images"), name="images")
 if not os.path.exists('images'):
     os.makedirs('images')
-app.o
+
 access_security = JwtAccessBearer(
     secret_key=os.getenv("JWT_SECRET"), auto_error=True)
 
 
-pwd_context = CryptContext(schemes="bcrypt", deprecated='auto')
+pwd_context = CryptContext(schemes="md5_crypt", deprecated='auto')
 engine = create_engine(
-    'mysql+pymysql://user:pass@host/dbname',
+    'mysql+pymysql://zifrkoks:12345678Qwe@localhost/deeplom',
     connect_args={
         'ssl': {
             'ssl_ca': '/path/to/server-ca.pem',
@@ -45,7 +46,7 @@ engine = create_engine(
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 db = Session()
-
+service = Service(db=db)
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
     try:
@@ -60,20 +61,23 @@ async def login(user_auth: UserAuth, response: Response):
 
 
 @app.post("/api/register")
-def registration(user_create: UserCreate):
+def registration(user_create: UserCreate,response:Response):
     try:
         user = User()
         user.username = user_create.username
         user.password = pwd_context.hash(user_create.password)
+        user.is_seller = user_create.is_seller
         db.add(user)
         db.commit()
-        db.refresh()
+        db.refresh(user)
         subject = {"user_id":user.id,"username":user.username,"balance":user.balance}
         access_token = access_security.create_access_token(
             subject=subject, expires_delta=timedelta(minutes=float(os.getenv("TOKEN_EXPIRES"))))
-        access_security.set_access_cookie( access_token)
+        access_security.set_access_cookie(response, access_token)
         return {"access_token": access_token}
-    except:
+    except BaseException as e:
+        db.rollback()
+        print(e)
         raise HTTPException(status_code=400, detail="User already exists")
 
 
@@ -88,9 +92,9 @@ def add_fields_me(add_fields:AddFields,credentials: JwtAuthorizationCredentials 
         user.lastname = add_fields.lastname
         user.email = add_fields.email
         db.commit()
-        db.refresh()
         return {"result": "ok"}
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
 @app.delete("/api/me")
@@ -99,9 +103,9 @@ def delete_me(credentials: JwtAuthorizationCredentials = Security(access_securit
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
         db.delete(user)
         db.commit()
-        db.refresh()
         return {"result": "ok"}
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
 
@@ -113,7 +117,8 @@ def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
         return GetUser(user)
     except:
         raise HTTPException(status_code=400, detail="User not found")
-    
+
+@app.post("/api/cards")
 def add_card(add_card:AddCard,credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
         username = credentials.subject["username"]
@@ -125,8 +130,8 @@ def add_card(add_card:AddCard,credentials: JwtAuthorizationCredentials = Securit
         card.date = add_card.date
         db.add(card)
         db.commit()
-        db.refresh()
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
 @app.post("/api/balance")
@@ -136,8 +141,58 @@ def increase_balance(count:int,credentials: JwtAuthorizationCredentials = Securi
         user.balance += count
         return {"result": f"balance upped on {count}"}
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
+
+@app.put("/api/games/{game_id}")
+def UpdateGame(game_id:int,game_create:GameCreate, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        file_path = f"images/{image.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        game = db.query(Game).filter(Game.id == game_id).one()
+        if(game.producer_name != credentials.subject["username"]):
+            return {"result": f"not edited:you are not owner"}
+        game.name = game_create.name
+        game.description = game_create.description
+        game.genre = game_create.genre
+        game.picture_url = file_path
+        game.producer_name = credentials.subject["username"]
+        db.commit()
+        return {"result": "ok"}
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+    
+
+
+
+@app.get("/api/games/{game_id}")
+def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    db.query(Game).filter(Game.id == game_id).one()
+    service.send_action_to_AI(credentials.subject["user_id"],game_id,ActionUser.VIEW)
+
+
+@app.get("/api/games/{game_id}")
+def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:    
+        game = db.query(Game).filter(Game.id == game_id).one()
+        if(game.producer_name != credentials.subject["username"]):
+            return {"result": f"not deleted: you are not owner"}
+        db.delete(game)
+        db.commit()
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+
+@app.get("/api/games")
+def getGames():
+    try:
+        return db.query(Game).all()
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
 
 @app.post("/api/games")
 def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -153,37 +208,12 @@ def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthori
         game.producer_name = credentials.subject["username"]
         db.add(game)
         db.commit()
-        db.refresh()
         return Response(status_code=200)
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
     
-@app.put("/api/games")
-def UpdateGame(game_create:GameUpdate, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
-    try:
-        file_path = f"images/{image.filename}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-        game = db.query(Game).filter(Game.id == game_create.id).one()
-        if(game.producer_name != credentials.subject["username"]):
-            return {"result": f"not edited:you are not owner"}
-        game.name = game_create.name
-        game.description = game_create.description
-        game.genre = game_create.genre
-        game.picture_url = file_path
-        game.producer_name = credentials.subject["username"]
-        db.commit()
-        db.refresh()
-        return {"result": "ok"}
-    except:
-        raise HTTPException(status_code=400, detail="model invalid")
-    
-
-@app.get("/api/games")
-def getGames():
-    return db.query(Game).all()
-
-@app.post("/api/games/{game_id}")
+@app.post("/api/games/cart/{game_id}")
 def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
         game = db.query(Game).filter(Game.id == game_id).one()
@@ -193,24 +223,31 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         item.user = user
         db.add(item)
         db.commit()
-        db.refresh()
         return {"result": "ok"}
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="invalid")
 
 
-@app.delete("/api/games/{game_id}")
+@app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
         game = db.query(Game).filter(Game.id == game_id).one()
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
         db.delete(db.query(CartItem).filter(CartItem.game_id == game.id & CartItem.user_id == user.id).one())
         db.commit()
-        db.refresh()
         return {"result": "ok"}
     except:
+        db.rollback()
         raise HTTPException(status_code=400, detail="invalid")
 
 
-
-
+def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    items = db.query(Game).filter(Game.carted_by.user_id == credentials.subject["user_id"]).all()
+    user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
+    fullprice = 0
+    for item in items:
+        fullprice += item.price
+    if(user.balance < fullprice):
+        return {"result":"money too small"}
+    service.send_action_to_AI(user.id,)

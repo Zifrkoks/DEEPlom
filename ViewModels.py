@@ -2,22 +2,23 @@
 
 
 from email import message
+from enum import Enum
 from os import name
-from .models import Producer, User
+from models import User
+from pydantic import BaseModel
 
-
-class UserCreate:
+class UserCreate(BaseModel):
     username:str
     password:str
     is_seller:bool
     
 
-class UserAuth:
+class UserAuth(BaseModel):
     username:str
     password:str
 
 
-class GetUser:
+class GetUser(BaseModel):
     def __init__(self,user:User):
         self.id =  user.id
         self.username = user.username
@@ -34,18 +35,13 @@ class GetUser:
     email:str
     number:str
 
-class GameCreate:
+class GameCreate(BaseModel):
     name:str
     description:str
     genre:str
     producer:str
-class GameUpdate:
-    id:int
-    name:str
-    description:str
-    genre:str
-    producer:str
-class GetGame:
+
+class GetGame(BaseModel):
     id:int
     name:str
     description:str
@@ -53,14 +49,14 @@ class GetGame:
     producer:str
     picture_url:str
 
-class CreateResponse:
+class CreateResponse(BaseModel):
     result:bool
     message:str
 class AddCart:
     game_id:int
 
 
-class AddFields:
+class AddFields(BaseModel):
     username:str
     firstname:str
     lastname:str
@@ -70,7 +66,13 @@ class AddFields:
     number:str
 
 
-class AddCard:
+class AddCard(BaseModel):
     number:str
     cvv:str
     date:str
+
+class ActionUser(Enum):
+    BUY = "buy"
+    CART = "addtpcart"
+    VIEW = "view"
+    TR="transaction"
