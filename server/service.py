@@ -5,7 +5,6 @@ from urllib import request
 
 import requests
 
-from ViewModels import ActionUser
 from models import Game
 
 

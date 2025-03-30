@@ -19,14 +19,6 @@ class UserAuth(BaseModel):
 
 
 class GetUser(BaseModel):
-    def __init__(self,user:User):
-        self.id =  user.id
-        self.username = user.username
-        self.balance = user.balance
-        self.firstname = user.firstname
-        self.lastname = user.lastname
-        self.email = user.email
-        self.number = user.number
     id:int
     username:str
     balance:int
@@ -34,6 +26,7 @@ class GetUser(BaseModel):
     lastname:str
     email:str
     number:str
+    cart:dict
 
 class GameCreate(BaseModel):
     name:str
@@ -71,6 +64,3 @@ class AddCard(BaseModel):
     cvv:str
     date:str
 
-class ActionUser(Enum):
-    CART = "addtpcart"
-    VIEW = "view"

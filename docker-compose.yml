@@ -42,7 +42,6 @@ services:
       - app-network
   app_ml:
     container_name: skill_app_diplom
-    image: app_diplom
     build: ./ai
     volumes:
       - logs:/usr/local/app_ml/logs
@@ -50,7 +49,7 @@ services:
       - dataset:/usr/local/app_ml/dataset
     restart: always
     ports:
-      - 8015:8015
+      - 8016:8016
     networks:
       - app-network
 

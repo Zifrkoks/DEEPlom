@@ -1,23 +1,20 @@
 from datetime import timedelta
 import os
-from random import random
 import shutil
-from urllib import response
 
 from dotenv import load_dotenv
 import requests
-from sqlalchemy import create_engine, true
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,joinedload
 
 from models import Base, Card, CartItem, Game, Transaction, TransactionPart, User
-from ViewModels import ActionUser, AddCard, AddFields, GameCreate, GetUser, UserAuth, UserCreate
+from ViewModels import AddCard, AddFields, GameCreate, GetUser, UserAuth, UserCreate
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
 from os.path import join, dirname
 
 from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
-from passlib.context import CryptContext
 
 from service import Service
 dotenv_path = join(dirname(__file__), '.env')
@@ -52,6 +49,7 @@ async def login(user_auth: UserAuth, response: Response):
             subject=subject, expires_delta=timedelta(minutes=float(os.getenv("TOKEN_EXPIRES"))))
         access_security.set_access_cookie(response, access_token)
         return {"access_token": access_token}
+        print(access_token)
     except BaseException as e:
         raise HTTPException(status_code=400, detail=f"{e}")
 
@@ -75,7 +73,7 @@ def registration(user_create: UserCreate,response:Response):
         db.rollback()
         print(e)
         raise HTTPException(status_code=400, detail="User already exists")
-
+    
 
 @app.post("/api/me")
 def add_fields_me(add_fields:AddFields,credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -89,7 +87,8 @@ def add_fields_me(add_fields:AddFields,credentials: JwtAuthorizationCredentials 
         user.email = add_fields.email
         db.commit()
         return {"result": "ok"}
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
@@ -105,13 +104,16 @@ def delete_me(credentials: JwtAuthorizationCredentials = Security(access_securit
         raise HTTPException(status_code=400, detail="User not found")
 
 
-@app.get("/api/me", response_model=GetUser)
+@app.get("/api/me")
 def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        username = credentials.subject["username"]
-        user = db.query(User).options(joinedload(User.cart_items,User.on_sale_games)).filter(User.username == username).one()
-        return GetUser(user)
-    except:
+        print(credentials.subject)
+        user_id = credentials.subject["user_id"]
+        user = db.query(User).options(joinedload(User.cart_items)).filter(User.id == user_id).one()
+        print(user)
+        return user
+    except BaseException as e:
+        print(e)
         raise HTTPException(status_code=400, detail="User not found")
 
 @app.post("/api/cards")
@@ -126,7 +128,8 @@ def add_card(add_card:AddCard,credentials: JwtAuthorizationCredentials = Securit
         card.date = add_card.date
         db.add(card)
         db.commit()
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
@@ -136,7 +139,8 @@ def increase_balance(count:int,credentials: JwtAuthorizationCredentials = Securi
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
         user.balance += count
         return {"result": f"balance upped on {count}"}
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
@@ -155,7 +159,9 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         db.commit()
         service.send_addtocart_to_AI(user.id,game.id)
         return {"result": "ok"}
-    except:
+
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="invalid")
 
@@ -168,7 +174,8 @@ def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         db.delete(db.query(CartItem).filter(CartItem.game_id == game.id & CartItem.user_id == user.id).one())
         db.commit()
         return {"result": "ok"}
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="invalid")
 
@@ -214,7 +221,8 @@ def UpdateGame(game_id:int,game_create:GameCreate, image:UploadFile, credentials
         game.producer_name = credentials.subject["username"]
         db.commit()
         return {"result": "ok"}
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
     
@@ -272,7 +280,7 @@ def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthori
 @app.post("/api/recomendation")
 def recomendation(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        resp = requests.get(f"https://{os.getenv("MODEL_SERVICE")}/recommendation/{credentials.subject["user_id"]}").json()
+        resp = requests.get(f"https://{os.getenv("MODEL_SERVICE")}/recommendation",params={"user_id":credentials.subject["user_id"]}).json()
         return resp
     except BaseException as e:
         print(e)
