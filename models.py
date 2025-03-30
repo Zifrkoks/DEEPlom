@@ -68,9 +68,16 @@ class Card(BaseModel):
 
 
 class TransactionPart(BaseModel):
-    __tablename__="transactions"
+    __tablename__="transaction_parts"
     game_id=Column(Integer, ForeignKey("games.id"))
-    transaction=Column(Integer,nullable=false)
+    transaction_id=Column(Integer,ForeignKey("transactions.id"),nullable=false)
+    transaction=relationship("Transaction",back_populates="parts")
     user_id=Column(Integer, ForeignKey("users.id"))
     game = relationship("Game",back_populates="transuctions")
     user = relationship("User",back_populates="transuctions")
+
+
+class Transaction(BaseModel):
+    __tablename__="transactions"
+    parts=relationship("TransactionPart",back_populates="transaction")
+    

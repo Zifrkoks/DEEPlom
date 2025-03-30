@@ -72,7 +72,6 @@ class AddCard(BaseModel):
     date:str
 
 class ActionUser(Enum):
-    BUY = "buy"
     CART = "addtpcart"
     VIEW = "view"
-    TR="transaction"
+    TR="set_transaction"

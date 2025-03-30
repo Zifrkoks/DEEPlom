@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, true
 from sqlalchemy.orm import sessionmaker,joinedload
 
-from models import Base, Card, CartItem, Game, User
+from models import Base, Card, CartItem, Game, Transaction, TransactionPart, User
 from ViewModels import ActionUser, AddCard, AddFields, GameCreate, GetUser, UserAuth, UserCreate
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -34,14 +34,7 @@ access_security = JwtAccessBearer(
 
 pwd_context = CryptContext(schemes="md5_crypt", deprecated='auto')
 engine = create_engine(
-    'mysql+pymysql://zifrkoks:12345678Qwe@localhost/deeplom',
-    connect_args={
-        'ssl': {
-            'ssl_ca': '/path/to/server-ca.pem',
-            'ssl_cert': '/path/to/client-cert.pem',
-            'ssl_key': '/path/to/client-key.pem'
-        }
-    }
+    f'mysql+pymysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@{os.getenv("DB_HOST")}/{os.getenv("DB")}',
 )
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
@@ -145,6 +138,60 @@ def increase_balance(count:int,credentials: JwtAuthorizationCredentials = Securi
         raise HTTPException(status_code=400, detail="User not found")
 
 
+
+@app.post("/api/games/cart/{game_id}")
+def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        game = db.query(Game).filter(Game.id == game_id).one()
+        user = db.query(User).filter(User.username == credentials.subject["username"]).one()
+        item = CartItem()
+        item.game = game
+        item.user = user
+        db.add(item)
+        db.commit()
+        return {"result": "ok"}
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="invalid")
+
+
+@app.delete("/api/games/cart/{game_id}")
+def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        game = db.query(Game).filter(Game.id == game_id).one()
+        user = db.query(User).filter(User.username == credentials.subject["username"]).one()
+        db.delete(db.query(CartItem).filter(CartItem.game_id == game.id & CartItem.user_id == user.id).one())
+        db.commit()
+        return {"result": "ok"}
+    except:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="invalid")
+
+@app.post("/api/games/cart/")
+def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    items = db.query(Game).filter(Game.carted_by.user_id == credentials.subject["user_id"]).all()
+    user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
+    fullprice = 0
+    for item in items:
+        fullprice += item.price
+    if(user.balance < fullprice):
+        return {"result":"money too small"}
+    tr = Transaction()
+    for item in items:
+        part = TransactionPart()
+        part.game = item
+        part.user = user
+        tr.parts.append(item)
+        service.add_to_transaction(user.id,item.id)
+    db.add(tr)
+    db.commit()
+    db.refresh(tr)
+    service.setTr(tr.id)
+    service.send_actions_to_AI()
+
+
+
+
 @app.put("/api/games/{game_id}")
 def UpdateGame(game_id:int,game_create:GameCreate, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
@@ -213,41 +260,3 @@ def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthori
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
     
-@app.post("/api/games/cart/{game_id}")
-def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
-    try:
-        game = db.query(Game).filter(Game.id == game_id).one()
-        user = db.query(User).filter(User.username == credentials.subject["username"]).one()
-        item = CartItem()
-        item.game = game
-        item.user = user
-        db.add(item)
-        db.commit()
-        return {"result": "ok"}
-    except:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="invalid")
-
-
-@app.delete("/api/games/cart/{game_id}")
-def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
-    try:
-        game = db.query(Game).filter(Game.id == game_id).one()
-        user = db.query(User).filter(User.username == credentials.subject["username"]).one()
-        db.delete(db.query(CartItem).filter(CartItem.game_id == game.id & CartItem.user_id == user.id).one())
-        db.commit()
-        return {"result": "ok"}
-    except:
-        db.rollback()
-        raise HTTPException(status_code=400, detail="invalid")
-
-
-def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    items = db.query(Game).filter(Game.carted_by.user_id == credentials.subject["user_id"]).all()
-    user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
-    fullprice = 0
-    for item in items:
-        fullprice += item.price
-    if(user.balance < fullprice):
-        return {"result":"money too small"}
-    service.send_action_to_AI(user.id,)
