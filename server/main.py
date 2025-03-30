@@ -2,8 +2,10 @@ from datetime import timedelta
 import os
 from random import random
 import shutil
+from urllib import response
 
 from dotenv import load_dotenv
+import requests
 from sqlalchemy import create_engine, true
 from sqlalchemy.orm import sessionmaker,joinedload
 
@@ -34,7 +36,6 @@ access_security = JwtAccessBearer(
 
 conn = f"mysql+pymysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@{os.getenv("DB_HOST")}/{os.getenv("DB")}"
 print(conn)
-pwd_context = CryptContext(schemes="md5_crypt", deprecated='auto')
 engine = create_engine(conn)
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
@@ -43,14 +44,16 @@ db = Session()
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
     try:
-        user = db.query(User).filter(User.username == user_auth.username & User.password == pwd_context.hash(user_auth.password)).one()
+        user = db.query(User).filter(User.username == user_auth.username).one()
+        if(user_auth.password !=user.password):
+            raise HTTPException(status_code=400, detail="wrong password")
         subject = {"user_id":user.id,"username":user.username,"balance":user.balance}
         access_token = access_security.create_access_token(
             subject=subject, expires_delta=timedelta(minutes=float(os.getenv("TOKEN_EXPIRES"))))
         access_security.set_access_cookie(response, access_token)
         return {"access_token": access_token}
-    except:
-        raise HTTPException(status_code=400, detail="User not found or wrong password")
+    except BaseException as e:
+        raise HTTPException(status_code=400, detail=f"{e}")
 
 
 @app.post("/api/register")
@@ -58,7 +61,7 @@ def registration(user_create: UserCreate,response:Response):
     try:
         user = User()
         user.username = user_create.username
-        user.password = pwd_context.hash(user_create.password)
+        user.password = user_create.password
         user.is_seller = user_create.is_seller
         db.add(user)
         db.commit()
@@ -142,6 +145,7 @@ def increase_balance(count:int,credentials: JwtAuthorizationCredentials = Securi
 @app.post("/api/games/cart/{game_id}")
 def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+        service = Service()
         game = db.query(Game).filter(Game.id == game_id).one()
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
         item = CartItem()
@@ -149,6 +153,7 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         item.user = user
         db.add(item)
         db.commit()
+        service.send_addtocart_to_AI(user.id,game.id)
         return {"result": "ok"}
     except:
         db.rollback()
@@ -188,7 +193,7 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
     db.commit()
     db.refresh(tr)
     service.setTr(tr.id)
-    service.send_actions_to_AI()
+    service.send_transaction_to_AI()
 
 
 
@@ -219,7 +224,9 @@ def UpdateGame(game_id:int,game_create:GameCreate, image:UploadFile, credentials
 @app.get("/api/games/{game_id}")
 def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     db.query(Game).filter(Game.id == game_id).one()
-    service.send_action_to_AI(credentials.subject["user_id"],game_id,ActionUser.VIEW)
+    service = Service()
+    service.send_view_to_AI(credentials.subject["user_id"],game_id)
+
 
 
 @app.get("/api/games/{game_id}")
@@ -261,3 +268,11 @@ def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthori
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
     
+
+@app.post("/api/recomendation")
+def recomendation(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        resp = requests.get(f"https://{os.getenv("MODEL_SERVICE")}/recommendation/{credentials.subject["user_id"]}").json()
+        return resp
+    except BaseException as e:
+        print(e)

@@ -2,6 +2,7 @@ version: "3.8"
 
 services:
   mysql_db:
+    container_name: db
     image: mysql:8
     restart: always
     ports:
@@ -22,6 +23,7 @@ services:
       retries: 10
 
   app:
+    container_name: backend
     build: ./server
     ports:
       - "8000:8000"
@@ -38,9 +40,29 @@ services:
       - TOKEN_EXPIRES=240
     networks:
       - app-network
+  app_ml:
+    container_name: skill_app_diplom
+    image: app_diplom
+    build: ./ai
+    volumes:
+      - logs:/usr/local/app_ml/logs
+      - models:/usr/local/app_ml/models
+      - dataset:/usr/local/app_ml/dataset
+    restart: always
+    ports:
+      - 8015:8015
+    networks:
+      - app-network
 
 volumes:
+  logs: { }
+  models: { }
+  dataset: { }
+  prometheus_data: { }
+  grafana_data: { }
   dbdata:  # Переименовано в соответствии с вашим volume
+
+
 
 networks:
   app-network:

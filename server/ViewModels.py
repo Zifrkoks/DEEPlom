@@ -74,4 +74,3 @@ class AddCard(BaseModel):
 class ActionUser(Enum):
     CART = "addtpcart"
     VIEW = "view"
-    TR="set_transaction"

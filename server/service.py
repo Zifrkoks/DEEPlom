@@ -1,5 +1,9 @@
 from datetime import datetime
+import os
 import string
+from urllib import request
+
+import requests
 
 from ViewModels import ActionUser
 from models import Game
@@ -10,7 +14,7 @@ class Service:
         self.ts = int(round(datetime.now().timestamp()))
     parts = list()
     
-    def set_transaction(self,tr_id):
+    def set_transaction(self,tr_id:int):
         self.transaction = tr_id
 
     def add_to_transaction(self,user_id:int,game_id:int):
@@ -19,7 +23,45 @@ class Service:
 
 
     def send_transaction_to_AI(self):
-        pass
+        arr = []
+        for v in self.parts:
+            part = {
+                'timestamp': self.ts,
+                'visitorid': v["u_id"],
+                'event': "transaction",
+                'itemid': v["g_id"],
+                "transactionid":self.transaction
+            }
+            arr.append(part)
+        data = {"Data": arr}
+        resp = requests.post(f"v{os.getenv("MODEL_SERVICE")}/model_train/").json()
+        print(resp)
 
+    def send_view_to_AI(self,user_id:int,game_id:int):
+        part = {
+                'timestamp': self.ts,
+                'visitorid': user_id,
+                'event': "view",
+                'itemid': game_id,
+                "transactionid":"nan"
+            }
+        arr = []
+        arr.append(part)
+        data = {"Data": arr}
+        resp = requests.post(f"https://{os.getenv("MODEL_SERVICE")}/model_train/",data=data).json()
+        print(resp)
 
-    
+    def send_addtocart_to_AI(self, user_id:int,game_id:int):
+        part = {
+                'timestamp': self.ts,
+                'visitorid': user_id,
+                'event': "addtocart",
+                'itemid': game_id,
+                "transactionid":"nan"
+            }
+        arr = []
+        arr.append(part)
+        data = {"Data": arr}
+        resp = requests.post(f"https://{os.getenv("MODEL_SERVICE")}/model_train/",data=data).json()
+        print(resp)
+        
