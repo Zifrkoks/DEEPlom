@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  mysql_db:
+    image: mysql:8
+    restart: always
+    ports:
+      - "3307:3306"  # Порт для доступа с хоста
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: deeplom
+      MYSQL_USER: zifrkoks
+      MYSQL_PASSWORD: 12345678Qwe
+    volumes:
+      - ./dbdata:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "--password=root"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: ./server
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql_db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=mysql_db  # Используем имя сервиса
+      - DB_PORT=3306      # Внутренний порт контейнера
+      - DB_USER=zifrkoks
+      - DB_PASS=12345678Qwe
+      - DB=deeplom
+      - JWT_SECRET=test
+      - TOKEN_EXPIRES=240
+    networks:
+      - app-network
+
+volumes:
+  dbdata:  # Переименовано в соответствии с вашим volume
+
+networks:
+  app-network:
+    driver: bridge

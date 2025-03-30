@@ -11,13 +11,14 @@ from models import Base, Card, CartItem, Game, Transaction, TransactionPart, Use
 from ViewModels import ActionUser, AddCard, AddFields, GameCreate, GetUser, UserAuth, UserCreate
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
+from os.path import join, dirname
 
 from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
 from passlib.context import CryptContext
 
 from service import Service
-
+dotenv_path = join(dirname(__file__), '.env')
 load_dotenv()
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins="*",
@@ -31,15 +32,14 @@ if not os.path.exists('images'):
 access_security = JwtAccessBearer(
     secret_key=os.getenv("JWT_SECRET"), auto_error=True)
 
-
+conn = f"mysql+pymysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@{os.getenv("DB_HOST")}/{os.getenv("DB")}"
+print(conn)
 pwd_context = CryptContext(schemes="md5_crypt", deprecated='auto')
-engine = create_engine(
-    f'mysql+pymysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@{os.getenv("DB_HOST")}/{os.getenv("DB")}',
-)
+engine = create_engine(conn)
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 db = Session()
-service = Service(db=db)
+
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
     try:
@@ -177,6 +177,7 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
     if(user.balance < fullprice):
         return {"result":"money too small"}
     tr = Transaction()
+    service = Service()
     for item in items:
         part = TransactionPart()
         part.game = item
