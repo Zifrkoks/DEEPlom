@@ -280,7 +280,9 @@ def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthori
 @app.post("/api/recomendation")
 def recomendation(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        resp = requests.get(f"https://{os.getenv("MODEL_SERVICE")}/recommendation",params={"user_id":credentials.subject["user_id"]}).json()
+        to = f"http://{os.getenv("MODEL_SERVICE")}/recommendation"
+        print(to)
+        resp = requests.get(to,params={"user_id":credentials.subject["user_id"]}).json()
         return resp
     except BaseException as e:
         print(e)

@@ -38,8 +38,10 @@ services:
       - DB=deeplom
       - JWT_SECRET=test
       - TOKEN_EXPIRES=240
+      - MODEL_SERVICE=app_ml:8016
     networks:
       - app-network
+
   app_ml:
     container_name: skill_app_diplom
     build: ./ai
@@ -52,7 +54,7 @@ services:
       - 8016:8016
     networks:
       - app-network
-
+    
 volumes:
   logs: { }
   models: { }
@@ -60,8 +62,6 @@ volumes:
   prometheus_data: { }
   grafana_data: { }
   dbdata:  # Переименовано в соответствии с вашим volume
-
-
 
 networks:
   app-network:
