@@ -169,7 +169,7 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.get("/api/games/cart")
 def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    return db.query(Game).join(CartItem).filter(CartItem.user_id == credentials.subject["user_id"] & Game.id == CartItem.game_id).all()
+    return db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id).filter(CartItem.user_id == credentials.subject["user_id"]).all()
 
 @app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -184,7 +184,7 @@ def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.post("/api/games/cart/")
 def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    items = db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id & CartItem.user_id == credentials.subject["username"]).all()
+    items = db.query(Game).join(CartItem).filter(CartItem.user_id == credentials.subject["username"]).filter(Game.id == CartItem.game_id).all()
     user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
     fullprice = 0
     for item in items:
