@@ -1,13 +1,17 @@
 from datetime import timedelta
+import email
 import os
+import random
 import shutil
+import smtplib
+import string
 
 from dotenv import load_dotenv
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,joinedload
 
-from models import Base, Card, CartItem, Game, Transaction, TransactionPart, User
+from models import Base, Card, CartItem, Game, RestorePass, Transaction, TransactionPart, User
 from ViewModels import AddCard, AddFields, GameCreate, UserAuth, UserCreate
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +42,9 @@ engine = create_engine(conn)
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 db = Session()
+smtpObj = smtplib.SMTP('smtp.gmail.com', 587)
+smtpObj.starttls()
+smtpObj.login(os.getenv("EMAIL_NAME"),os.getenv("EMAIL_PASS"))
 
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
@@ -114,6 +121,43 @@ def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
         print(user)
         return user
     except BaseException as e:
+        print(e)
+        raise HTTPException(status_code=400, detail="User not found")
+
+
+@app.post("/api/restore_pass")
+def send_restore_pass(username:str,email:str):
+    try:
+        user = db.query(User).filter(User.username == username).filter(User.email == email).one()
+        random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+        restore = RestorePass()
+        restore.code = random_string
+        restore.username = username
+        lines = [f"From: {os.getenv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
+        msg = "\r\n".join(lines)
+        smtpObj.sendmail(os.getenv("EMAIL_NAME"),user.email,msg)
+        restores = db.query(RestorePass).filter(RestorePass.username == username).delete()
+        db.add(restore)
+        db.commit()
+        return {"result": "ok"}
+    except BaseException as e:
+        db.rollback()
+        print(e)
+        raise HTTPException(status_code=400, detail="User not found")
+
+@app.put("/api/restore_pass")
+def input_code(username:str,code:str,newPass:str):
+    try:
+        restore = db.query(RestorePass).filter(RestorePass.username == username).first()
+        if(restore.code != code):
+            raise HTTPException(status_code=400, detail="code invalid")
+        user = db.query(User).filter(User.username == username).one()
+        user.password = newPass
+        db.delete(restore)
+        db.commit()
+        return {"result": "ok"}
+    except BaseException as e:
+        db.rollback()
         print(e)
         raise HTTPException(status_code=400, detail="User not found")
 

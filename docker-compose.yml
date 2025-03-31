@@ -39,6 +39,8 @@ services:
       - JWT_SECRET=test
       - TOKEN_EXPIRES=240
       - MODEL_SERVICE=app_ml:8016
+      - EMAIL_NAME=q92552189@gmail.com
+      - EMAIL_PASS=jzfe ojpp ggiq khyz
     networks:
       - app-network
 

@@ -87,3 +87,8 @@ class Transaction(BaseModel):
     __tablename__="transactions"
     parts=relationship("TransactionPart",back_populates="transaction")
     
+
+class RestorePass(BaseModel):
+    __tablename__="restores"
+    username=Column(String(50), ForeignKey("users.username"),nullable=false)
+    code=Column(String(6),nullable=false)

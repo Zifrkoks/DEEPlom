@@ -52,7 +52,6 @@ class AddCart:
 
 
 class AddFields(BaseModel):
-    username:str
     firstname:str
     lastname:str
     email:str
