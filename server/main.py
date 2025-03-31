@@ -169,12 +169,12 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.get("/api/games/cart")
 def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    return db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).all()
+    return db.query(Game).join(CartItem).filter(CartItem.user_id == credentials.subject["user_id"] & Game.id == CartItem.game_id).all()
 
 @app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        db.delete(db.query(CartItem).filter(CartItem.game_id == game_id & CartItem.user_id == credentials.subject["username"]).one())
+        db.delete(db.query(CartItem).filter(CartItem.id == game_id & CartItem.user_id == credentials.subject["user_id"]).one())
         db.commit()
         return {"result": "ok"}
     except BaseException as e:
@@ -184,7 +184,7 @@ def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.post("/api/games/cart/")
 def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    items = db.query(Game).filter(Game.id == credentials.subject["user_id"]).all()
+    items = db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id & CartItem.user_id == credentials.subject["username"]).all()
     user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
     fullprice = 0
     for item in items:
@@ -218,6 +218,7 @@ def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorization
         game.description = game_create.description
         game.genre = game_create.genre
         game.price = game_create.price
+        game.platforms = game_create.platforms
         db.commit()
         
         return {"message": "Game updated", "id": game.id}
@@ -270,6 +271,7 @@ def createGame(game_create:GameCreate,  credentials: JwtAuthorizationCredentials
         game.genre = game_create.genre
         game.price = game_create.price
         game.producer_name = credentials.subject["username"]
+        game.platforms = game_create.platforms
         print(game)
         db.add(game)
         db.commit()

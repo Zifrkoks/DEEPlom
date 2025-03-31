@@ -33,6 +33,7 @@ class GameCreate(BaseModel):
     description:str
     genre:str
     price:int
+    platforms:str
 
 class GetGame(BaseModel):
     id:int
@@ -42,6 +43,7 @@ class GetGame(BaseModel):
     producer:str
     picture_url:str
     date:datetime
+
 class CreateResponse(BaseModel):
     result:bool
     message:str
