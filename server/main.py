@@ -208,21 +208,18 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
 
 
 @app.put("/api/games/{game_id}")
-def UpdateGame(game_id:int,game_create:GameCreate, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
+def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        file_path = f"images/{image.filename}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
         game = db.query(Game).filter(Game.id == game_id).one()
         if(game.producer_name != credentials.subject["username"]):
             return {"result": f"not edited:you are not owner"}
         game.name = game_create.name
         game.description = game_create.description
         game.genre = game_create.genre
-        game.picture_url = file_path
-        game.producer_name = credentials.subject["username"]
+        game.price = game_create.price
         db.commit()
-        return {"result": "ok"}
+        
+        return {"message": "Game updated", "id": game.id}
     except BaseException as e:
         print(e)
         db.rollback()
@@ -233,9 +230,10 @@ def UpdateGame(game_id:int,game_create:GameCreate, image:UploadFile, credentials
 
 @app.get("/api/games/{game_id}")
 def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
-    db.query(Game).filter(Game.id == game_id).one()
+    game = db.query(Game).filter(Game.id == game_id).one()
     service = Service()
     service.send_view_to_AI(credentials.subject["user_id"],game_id)
+    return game
 
 
 
