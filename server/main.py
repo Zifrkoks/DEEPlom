@@ -167,13 +167,14 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         db.rollback()
         raise HTTPException(status_code=400, detail="invalid")
 
+@app.get("/api/games/cart")
+def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    return db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).all()
 
 @app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        game = db.query(Game).filter(Game.id == game_id).one()
-        user = db.query(User).filter(User.username == credentials.subject["username"]).one()
-        db.delete(db.query(CartItem).filter(CartItem.game_id == game.id & CartItem.user_id == user.id).one())
+        db.delete(db.query(CartItem).filter(CartItem.game_id == game_id & CartItem.user_id == credentials.subject["username"]).one())
         db.commit()
         return {"result": "ok"}
     except BaseException as e:
@@ -183,7 +184,7 @@ def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.post("/api/games/cart/")
 def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    items = db.query(Game).filter(Game.carted_by.user_id == credentials.subject["user_id"]).all()
+    items = db.query(Game).filter(Game.id == credentials.subject["user_id"]).all()
     user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
     fullprice = 0
     for item in items:

@@ -1,6 +1,7 @@
+from datetime import datetime
 from enum import Enum
 from tkinter import CASCADE
-from sqlalchemy import String,BOOLEAN, TIMESTAMP, Boolean, Column, ForeignKey, Integer, Null, Nullable, Table, Text, column, null, true,false
+from sqlalchemy import Date, DateTime, String,BOOLEAN, TIMESTAMP, Boolean, Column, ForeignKey, Integer, Null, Nullable, Table, Text, column, func, null, true,false
 from sqlalchemy.orm import DeclarativeBase,relationship
 from ast import List
 import email
@@ -45,6 +46,7 @@ class Game(BaseModel):
     picture_url=Column(Text)
     genre = Column(Text, nullable=false)
     price= Column(Integer,nullable=false)
+    date = Column(DateTime(timezone=True), server_default=func.now())
     producer_name=Column(String(50),ForeignKey("users.username"), nullable=False)
     producer=relationship("User",back_populates="on_sale_games")
     carted_by = relationship('CartItem',back_populates='game')

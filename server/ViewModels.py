@@ -1,6 +1,7 @@
 
 
 
+from datetime import datetime
 from email import message
 from enum import Enum
 from os import name
@@ -40,7 +41,7 @@ class GetGame(BaseModel):
     genre:str
     producer:str
     picture_url:str
-
+    date:datetime
 class CreateResponse(BaseModel):
     result:bool
     message:str
