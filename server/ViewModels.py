@@ -4,7 +4,6 @@
 from email import message
 from enum import Enum
 from os import name
-from models import User
 from pydantic import BaseModel
 
 class UserCreate(BaseModel):
@@ -32,7 +31,7 @@ class GameCreate(BaseModel):
     name:str
     description:str
     genre:str
-    producer:str
+    price:int
 
 class GetGame(BaseModel):
     id:int

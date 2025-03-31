@@ -40,15 +40,17 @@ class User(BaseModel):
 
 class Game(BaseModel):
     __tablename__ = "games"
-    name= Column(String(100),nullable=false)
+    name= Column(String(50),nullable=false)
     description=Column(Text, nullable=false)
-    picture_url=Column(Text,nullable=false)
-    genre= Column(Text,nullable=false)
+    picture_url=Column(Text)
+    genre = Column(Text, nullable=false)
     price= Column(Integer,nullable=false)
-    producer_name=Column(String(100),ForeignKey("users.username"),nullable=false)
+    producer_name=Column(String(50),ForeignKey("users.username"), nullable=False)
     producer=relationship("User",back_populates="on_sale_games")
     carted_by = relationship('CartItem',back_populates='game')
     transuctions = relationship('TransactionPart',back_populates='game')
+
+
 class CartItem(BaseModel):
     __tablename__="cart_items"
     user_id=Column(Integer, ForeignKey("users.id"))

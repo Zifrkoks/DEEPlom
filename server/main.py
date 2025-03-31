@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,joinedload
 
 from models import Base, Card, CartItem, Game, Transaction, TransactionPart, User
-from ViewModels import AddCard, AddFields, GameCreate, GetUser, UserAuth, UserCreate
+from ViewModels import AddCard, AddFields, GameCreate, UserAuth, UserCreate
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
 from os.path import join, dirname
@@ -17,6 +17,7 @@ from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
 
 from service import Service
+
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv()
 app = FastAPI()
@@ -128,6 +129,7 @@ def add_card(add_card:AddCard,credentials: JwtAuthorizationCredentials = Securit
         card.date = add_card.date
         db.add(card)
         db.commit()
+        return {"result": "ok"}
     except BaseException as e:
         print(e)
         db.rollback()
@@ -237,7 +239,7 @@ def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(acc
 
 
 
-@app.get("/api/games/{game_id}")
+@app.delete("/api/games/{game_id}")
 def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:    
         game = db.query(Game).filter(Game.id == game_id).one()
@@ -245,7 +247,8 @@ def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(
             return {"result": f"not deleted: you are not owner"}
         db.delete(game)
         db.commit()
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
 
@@ -253,29 +256,43 @@ def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(
 def getGames():
     try:
         return db.query(Game).all()
-    except:
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
 
 @app.post("/api/games")
-def createGame(game_create:GameCreate, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
+def createGame(game_create:GameCreate,  credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        file_path = f"images/{image.filename}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+       
         game = Game()
         game.name = game_create.name
         game.description = game_create.description
         game.genre = game_create.genre
-        game.picture_url = file_path
+        game.price = game_create.price
         game.producer_name = credentials.subject["username"]
+        print(game)
         db.add(game)
         db.commit()
-        return Response(status_code=200)
-    except:
+        db.refresh(game)
+        return {"message": "Game created", "id": game.id}
+    except BaseException as e:
+        print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
-    
+@app.post("/api/photo/{game_id}")
+def setPhoto(game_id:int, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    game = db.query(Game).filter(Game.id == game_id).one()
+    if(game.producer_name != credentials.subject["username"]):
+        return {"result": f"not deleted: you are not owner"}
+    file_path = f"images/{image.filename}"
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+    game.picture_url = file_path
+    db.commit()
+    db.refresh(game)
+    return {"result":"ok"}
+
 
 @app.post("/api/recomendation")
 def recomendation(credentials: JwtAuthorizationCredentials = Security(access_security)):

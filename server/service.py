@@ -32,8 +32,8 @@ class Service:
                 "transactionid":self.transaction
             }
             arr.append(part)
-        data = {"Data": arr}
-        resp = requests.post(f"v{os.getenv("MODEL_SERVICE")}/model_train/").json()
+        print({"Data": arr})
+        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data={"Data": arr}).json()
         print(resp)
 
     def send_view_to_AI(self,user_id:int,game_id:int):
@@ -46,8 +46,9 @@ class Service:
             }
         arr = []
         arr.append(part)
-        data = {"Data": arr}
-        resp = requests.post(f"https://{os.getenv("MODEL_SERVICE")}/model_train/",data=data).json()
+        print({"Data": arr})
+
+        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data={"Data": arr}).json()
         print(resp)
 
     def send_addtocart_to_AI(self, user_id:int,game_id:int):
@@ -60,7 +61,7 @@ class Service:
             }
         arr = []
         arr.append(part)
-        data = {"Data": arr}
-        resp = requests.post(f"https://{os.getenv("MODEL_SERVICE")}/model_train/",data=data).json()
+        print({"Data": arr})
+        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data={"Data": arr}).json()
         print(resp)
         
