@@ -1,4 +1,6 @@
 from datetime import datetime
+import json
+import math
 import os
 import string
 from urllib import request
@@ -10,7 +12,7 @@ from models import Game
 
 class Service:
     def __init__(self):
-        self.ts = int(round(datetime.now().timestamp()))
+        self.ts = int((datetime.now().timestamp()*1000))
     parts = list()
     
     def set_transaction(self,tr_id:int):
@@ -25,43 +27,45 @@ class Service:
         arr = []
         for v in self.parts:
             part = {
-                'timestamp': self.ts,
-                'visitorid': v["u_id"],
-                'event': "transaction",
-                'itemid': v["g_id"],
+                "timestamp": self.ts,
+                "visitorid": v["u_id"],
+                "event": "transaction",
+                "itemid": v["g_id"],
                 "transactionid":self.transaction
             }
             arr.append(part)
-        print({"Data": arr})
-        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data={"Data": arr}).json()
+        datas = json.dumps({"Data": arr})
+        print(datas)
+        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data=datas).json()
         print(resp)
 
     def send_view_to_AI(self,user_id:int,game_id:int):
         part = {
-                'timestamp': self.ts,
-                'visitorid': user_id,
-                'event': "view",
-                'itemid': game_id,
-                "transactionid":"nan"
+                "event": "view",
+                "transactionid": math.nan,
+                "timestamp": self.ts,
+                "visitorid": user_id,
+                "itemid": game_id,
             }
         arr = []
         arr.append(part)
-        print({"Data": arr})
-
-        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data={"Data": arr}).json()
+        datas = json.dumps({"Data": arr})
+        print(datas)
+        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data=datas).json()
         print(resp)
 
     def send_addtocart_to_AI(self, user_id:int,game_id:int):
         part = {
-                'timestamp': self.ts,
-                'visitorid': user_id,
-                'event': "addtocart",
-                'itemid': game_id,
-                "transactionid":"nan"
+                "timestamp": self.ts,
+                "visitorid": user_id,
+                "event": "addtocart",
+                "itemid": game_id,
+                "transactionid": math.nan
             }
         arr = []
         arr.append(part)
-        print({"Data": arr})
-        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data={"Data": arr}).json()
+        datas = json.dumps({"Data": arr})
+        print(datas)
+        resp = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data=datas).json()
         print(resp)
         

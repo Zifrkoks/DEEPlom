@@ -133,7 +133,7 @@ def send_restore_pass(username:str,email:str):
         restore = RestorePass()
         restore.code = random_string
         restore.username = username
-        lines = [f"From: {os.getenv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
+        lines = [f"From: {os.geteсnv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
         msg = "\r\n".join(lines)
         smtpObj.sendmail(os.getenv("EMAIL_NAME"),user.email,msg)
         restores = db.query(RestorePass).filter(RestorePass.username == username).delete()
@@ -246,10 +246,8 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
     db.add(tr)
     db.commit()
     db.refresh(tr)
-    service.setTr(tr.id)
+    service.set_transaction(tr.id)
     service.send_transaction_to_AI()
-
-
 
 
 @app.put("/api/games/{game_id}")
@@ -308,7 +306,6 @@ def getGames():
 @app.post("/api/games")
 def createGame(game_create:GameCreate,  credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-       
         game = Game()
         game.name = game_create.name
         game.description = game_create.description
