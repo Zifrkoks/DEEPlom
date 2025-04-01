@@ -46,7 +46,10 @@ services:
 
   app_ml:
     container_name: skill_app_diplom
-    build: ./ai
+    image: app_diplom
+    build: 
+      context: ./ai
+      dockerfile: Dockerfile
     volumes:
       - logs:/usr/local/app_ml/logs
       - models:/usr/local/app_ml/models
