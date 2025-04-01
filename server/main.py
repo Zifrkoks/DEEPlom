@@ -117,7 +117,7 @@ def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
         print(credentials.subject)
         user_id = credentials.subject["user_id"]
-        user = db.query(User).options(joinedload(User.cart_items)).filter(User.id == user_id).one()
+        user = db.query(User).options(joinedload(User.cart_items),joinedload(User.cards)).filter(User.id == user_id).one()
         print(user)
         return user
     except BaseException as e:
@@ -133,10 +133,11 @@ def send_restore_pass(username:str,email:str):
         restore = RestorePass()
         restore.code = random_string
         restore.username = username
-        lines = [f"From: {os.geteсnv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
+        lines = [f"From: {os.getenv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
         msg = "\r\n".join(lines)
         smtpObj.sendmail(os.getenv("EMAIL_NAME"),user.email,msg)
-        restores = db.query(RestorePass).filter(RestorePass.username == username).delete()
+        db.query(RestorePass).filter(RestorePass.username == username).delete()
+        db.commit()
         db.add(restore)
         db.commit()
         return {"result": "ok"}
