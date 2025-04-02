@@ -1,5 +1,6 @@
 from datetime import timedelta
 import email
+import json
 import os
 import random
 import shutil
@@ -200,8 +201,7 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         service = Service()
         game = db.query(Game).filter(Game.id == game_id).one()
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
-        if(db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).filter(CartItem.game_id == game_id).all().count() !=0):
-            return {"result": "item is exist"}
+        db.query(CartItem).filter(CartItem.user_id==credentials.subject["user_id"]).filter(CartItem.game_id==game_id).delete()
         item = CartItem()
         item.game = game
         item.user = user
@@ -232,7 +232,7 @@ def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.post("/api/games/cart/")
 def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    items = db.query(Game).join(CartItem).filter(CartItem.user_id == credentials.subject["username"]).filter(Game.id == CartItem.game_id).all()
+    items = db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id).filter(CartItem.user_id == credentials.subject["user_id"]).all()
     user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
     fullprice = 0
     for item in items:
@@ -245,13 +245,15 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
         part = TransactionPart()
         part.game = item
         part.user = user
-        tr.parts.append(item)
+        part.transaction_id = tr.id
         service.add_to_transaction(user.id,item.id)
     db.add(tr)
+    user.balance -= fullprice
     db.commit()
     db.refresh(tr)
     service.set_transaction(tr.id)
     service.send_transaction_to_AI()
+    return {"result": "buyed"}
 
 
 @app.put("/api/games/{game_id}")
