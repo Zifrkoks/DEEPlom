@@ -126,9 +126,9 @@ def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
 
 
 @app.post("/api/restore_pass")
-def send_restore_pass(username:str,email:str):
+def send_restore_pass(username:str):
     try:
-        user = db.query(User).filter(User.username == username).filter(User.email == email).one()
+        user = db.query(User).filter(User.username == username).one()
         random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
         db.query(RestorePass).filter(RestorePass.username == username).delete()
         db.commit()
