@@ -130,14 +130,15 @@ def send_restore_pass(username:str,email:str):
     try:
         user = db.query(User).filter(User.username == username).filter(User.email == email).one()
         random_string = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+        db.query(RestorePass).filter(RestorePass.username == username).delete()
+        db.commit()
         restore = RestorePass()
         restore.code = random_string
         restore.username = username
         lines = [f"From: {os.getenv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
         msg = "\r\n".join(lines)
         smtpObj.sendmail(os.getenv("EMAIL_NAME"),user.email,msg)
-        db.query(RestorePass).filter(RestorePass.username == username).delete()
-        db.commit()
+        
         db.add(restore)
         db.commit()
         return {"result": "ok"}
@@ -199,6 +200,8 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         service = Service()
         game = db.query(Game).filter(Game.id == game_id).one()
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
+        if(db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).filter(CartItem.game_id == game_id).all().count() !=0):
+            return {"result": "item is exist"}
         item = CartItem()
         item.game = game
         item.user = user
@@ -219,7 +222,7 @@ def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security
 @app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        db.delete(db.query(CartItem).filter(CartItem.id == game_id & CartItem.user_id == credentials.subject["user_id"]).one())
+        item = db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).filter(CartItem.game_id == game_id).delete()
         db.commit()
         return {"result": "ok"}
     except BaseException as e:
