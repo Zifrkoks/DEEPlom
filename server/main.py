@@ -82,7 +82,19 @@ def registration(user_create: UserCreate,response:Response):
         db.rollback()
         print(e)
         raise HTTPException(status_code=400, detail="User already exists")
-    
+@app.get("/api/bought")
+def get_bought(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        print(credentials.subject)
+        user_id = credentials.subject["user_id"]
+        bought = db.query(Game).join(TransactionPart).filter(TransactionPart.user_id == user_id).filter(Game.id == TransactionPart.game_id).all()
+
+        print(bought)
+        return bought
+    except BaseException as e:
+        print(e)
+        raise HTTPException(status_code=400, detail="User not found")
+ 
 
 @app.post("/api/me")
 def add_fields_me(add_fields:AddFields,credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -246,8 +258,9 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
         part.game = item
         part.user = user
         part.transaction_id = tr.id
+        db.add(part)
         service.add_to_transaction(user.id,item.id)
-    db.add(tr)
+    
     user.balance -= fullprice
     db.commit()
     db.refresh(tr)
