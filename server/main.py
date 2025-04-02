@@ -222,7 +222,11 @@ def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security
 @app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+<<<<<<< HEAD
         item = db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).filter(CartItem.game_id == game_id).delete()
+=======
+        db.delete(db.query(CartItem).filter(CartItem.user_id == credentials.subject["user_id"]).filter(CartItem.id == game_id).one())
+>>>>>>> df3ba00d4e286ea6a8591530ca7636b1c29ed75f
         db.commit()
         return {"result": "ok"}
     except BaseException as e:
