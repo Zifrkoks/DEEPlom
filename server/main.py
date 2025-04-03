@@ -6,6 +6,7 @@ import random
 import shutil
 import smtplib
 import string
+import threading
 
 from dotenv import load_dotenv
 import requests
@@ -46,7 +47,9 @@ db = Session()
 smtpObj = smtplib.SMTP('smtp.gmail.com', 587)
 smtpObj.starttls()
 smtpObj.login(os.getenv("EMAIL_NAME"),os.getenv("EMAIL_PASS"))
-
+service = Service()
+thread1 = threading.Thread(target=service.send_periodic_requests)
+thread1.start()
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
     try:
@@ -210,7 +213,6 @@ def increase_balance(count:int,credentials: JwtAuthorizationCredentials = Securi
 @app.post("/api/games/cart/{game_id}")
 def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        service = Service()
         game = db.query(Game).filter(Game.id == game_id).one()
         user = db.query(User).filter(User.username == credentials.subject["username"]).one()
         db.query(CartItem).filter(CartItem.user_id==credentials.subject["user_id"]).filter(CartItem.game_id==game_id).delete()
@@ -252,15 +254,15 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
     if(user.balance < fullprice):
         return {"result":"money too small"}
     tr = Transaction()
-    service = Service()
     for item in items:
+        item.sales+=1
         part = TransactionPart()
         part.game = item
         part.user = user
         part.transaction_id = tr.id
         db.add(part)
         service.add_to_transaction(user.id,item.id)
-    
+    db.add(tr)
     user.balance -= fullprice
     db.commit()
     db.refresh(tr)
@@ -294,7 +296,6 @@ def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorization
 @app.get("/api/games/{game_id}")
 def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     game = db.query(Game).filter(Game.id == game_id).one()
-    service = Service()
     service.send_view_to_AI(credentials.subject["user_id"],game_id)
     return game
 
@@ -360,7 +361,8 @@ def recomendation(credentials: JwtAuthorizationCredentials = Security(access_sec
     try:
         to = f"http://{os.getenv("MODEL_SERVICE")}/recommendation"
         print(to)
-        resp = requests.get(to,params={"user_id":credentials.subject["user_id"]}).json()
+        resp = requests.get(to,params={"user_id":credentials.subject["user_id"]})
+        print(resp.text)
         return resp
     except BaseException as e:
         print(e)

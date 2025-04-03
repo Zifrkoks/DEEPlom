@@ -45,6 +45,7 @@ class Game(BaseModel):
     name= Column(String(50),nullable=false)
     description=Column(Text, nullable=false)
     picture_url=Column(Text)
+    sales=Column(Integer, default=0)
     genre = Column(Text, nullable=false)
     price= Column(Integer,nullable=false)
     date = Column(DateTime(timezone=True), server_default=func.now())
