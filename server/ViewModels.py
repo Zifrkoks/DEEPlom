@@ -34,7 +34,7 @@ class GameCreate(BaseModel):
     genre:str
     price:int
     platforms:str
-
+    discount:int
 class GetGame(BaseModel):
     id:int
     name:str

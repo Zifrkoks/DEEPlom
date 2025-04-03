@@ -250,7 +250,7 @@ def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
     user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
     fullprice = 0
     for item in items:
-        fullprice += item.price
+        fullprice += (item.price *(100 - item.discount))/100
     if(user.balance < fullprice):
         return {"result":"money too small"}
     tr = Transaction()
@@ -282,6 +282,7 @@ def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorization
         game.genre = game_create.genre
         game.price = game_create.price
         game.platforms = game_create.platforms
+        game.discount = game_create.discount
         db.commit()
         
         return {"message": "Game updated", "id": game.id}
@@ -289,9 +290,10 @@ def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorization
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
-    
-
-
+@app.get("/api/discount")
+def setDiscountAll(discount:int):
+    db.query(Game).update({Game.discount: discount})
+    db.commit()
 
 @app.get("/api/games/{game_id}")
 def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
