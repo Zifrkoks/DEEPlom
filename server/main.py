@@ -309,6 +309,7 @@ def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(
             return {"result": f"not deleted: you are not owner"}
         db.delete(game)
         db.commit()
+        return {"message": "Game deleted"}
     except BaseException as e:
         print(e)
         db.rollback()
