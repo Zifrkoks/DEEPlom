@@ -26,7 +26,7 @@ services:
     container_name: backend
     build: ./server
     ports:
-      - "8000:8000"
+      - "8013:8000"
     depends_on:
       mysql_db:
         condition: service_healthy
@@ -40,7 +40,7 @@ services:
       - TOKEN_EXPIRES=240
       - MODEL_SERVICE=app_ml:8016
       - EMAIL_NAME=q92552189@gmail.com
-      - EMAIL_PASS=mkrx gtbq qgip umng
+      - EMAIL_PASS=giqj zllu eajt jtwy
     networks:
       - app-network
 

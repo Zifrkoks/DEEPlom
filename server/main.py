@@ -44,9 +44,7 @@ engine = create_engine(conn)
 Base.metadata.create_all(engine)
 Session = sessionmaker(bind=engine)
 db = Session()
-smtpObj = smtplib.SMTP('smtp.gmail.com', 587)
-smtpObj.starttls()
-smtpObj.login(os.getenv("EMAIL_NAME"),os.getenv("EMAIL_PASS"))
+
 service = Service()
 thread1 = threading.Thread(target=service.send_periodic_requests)
 thread1.start()
@@ -153,8 +151,11 @@ def send_restore_pass(username:str):
         restore.username = username
         lines = [f"From: {os.getenv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
         msg = "\r\n".join(lines)
+        smtpObj = smtplib.SMTP('smtp.gmail.com', 587)
+        smtpObj.starttls()
+        smtpObj.login(os.getenv("EMAIL_NAME"),os.getenv("EMAIL_PASS"))
         smtpObj.sendmail(os.getenv("EMAIL_NAME"),user.email,msg)
-        
+        smtpObj.close()
         db.add(restore)
         db.commit()
         return {"result": "ok"}
@@ -245,12 +246,9 @@ def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
         raise HTTPException(status_code=400, detail="invalid")
 
 @app.post("/api/games/cart/")
-def buy(credentials: JwtAuthorizationCredentials = Security(access_security)):
+def buy(fullprice:int,credentials: JwtAuthorizationCredentials = Security(access_security)):
     items = db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id).filter(CartItem.user_id == credentials.subject["user_id"]).all()
     user = db.query(User).filter(User.id == credentials.subject["user_id"]).one()
-    fullprice = 0
-    for item in items:
-        fullprice += (item.price *(100 - item.discount))/100
     if(user.balance < fullprice):
         return {"result":"money too small"}
     tr = Transaction()
