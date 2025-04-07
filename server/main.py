@@ -34,6 +34,9 @@ app.add_middleware(CORSMiddleware, allow_origins="*",
 app.mount("/images", StaticFiles(directory="images"), name="images")
 if not os.path.exists('images'):
     os.makedirs('images')
+app.mount("/bins", StaticFiles(directory="bins"), name="bins")
+if not os.path.exists('bins'):
+    os.makedirs('bins')
 
 access_security = JwtAccessBearer(
     secret_key=os.getenv("JWT_SECRET"), auto_error=True)
@@ -90,7 +93,6 @@ def get_bought(credentials: JwtAuthorizationCredentials = Security(access_securi
         user_id = credentials.subject["user_id"]
         bought = db.query(Game).join(TransactionPart).filter(TransactionPart.user_id == user_id).filter(Game.id == TransactionPart.game_id).all()
 
-        print(bought)
         return bought
     except BaseException as e:
         print(e)
@@ -232,7 +234,10 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 
 @app.get("/api/games/cart")
 def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    return db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id).filter(CartItem.user_id == credentials.subject["user_id"]).all()
+    games = db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id).filter(CartItem.user_id == credentials.subject["user_id"]).all()
+    for game in games:
+            game.bin_url = ""
+    return games
 
 @app.delete("/api/games/cart/{game_id}")
 def del_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -296,6 +301,7 @@ def setDiscountAll(discount:int):
 @app.get("/api/games/{game_id}")
 def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     game = db.query(Game).filter(Game.id == game_id).one()
+    game.bin_url = ""
     service.send_view_to_AI(credentials.subject["user_id"],game_id)
     return game
 
@@ -318,7 +324,10 @@ def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(
 @app.get("/api/games")
 def getGames():
     try:
-        return db.query(Game).all()
+        games = db.query(Game).all()
+        for game in games:
+            game.bin_url = ""
+        return games
     except BaseException as e:
         print(e)
         db.rollback()
@@ -356,6 +365,18 @@ def setPhoto(game_id:int, image:UploadFile, credentials: JwtAuthorizationCredent
     db.refresh(game)
     return {"result":"ok"}
 
+@app.post("/api/bins/{game_id}")
+def setExe(game_id:int, bins:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    game = db.query(Game).filter(Game.id == game_id).one()
+    if(game.producer_name != credentials.subject["username"]):
+        return {"result": f"not deleted: you are not owner"}
+    file_path = f"bins/{bins.filename}"
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(bins.file, buffer)
+    game.bin_url = file_path
+    db.commit()
+    db.refresh(game)
+    return {"result":"ok"}
 
 @app.post("/api/recomendation")
 def recomendation(credentials: JwtAuthorizationCredentials = Security(access_security)):

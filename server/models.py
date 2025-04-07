@@ -45,6 +45,7 @@ class Game(BaseModel):
     name= Column(String(50),nullable=false)
     description=Column(Text, nullable=false)
     picture_url=Column(Text)
+    bin_url=Column(Text)
     sales=Column(Integer, default=0)
     discount=Column(Integer,default=0)
     genre = Column(Text, nullable=false)
