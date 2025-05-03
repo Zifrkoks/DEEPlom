@@ -16,10 +16,26 @@ class Base(DeclarativeBase): pass
 
 class BaseModel(Base):
     __abstract__ = True
-
     id = Column(Integer, nullable=False, unique=True, primary_key=True, autoincrement=True)
 
 
+class AdminBalance(BaseModel):
+    __tablename__ = "admin_balances"
+    balance=Column(Integer,default=0)
+    admins = relationship("Admin",back_populates="balance")
+
+
+class Admin(BaseModel):
+    __tablename__ = "admins"
+    username=Column(String(50), nullable=false, unique=true)
+    password=Column(String(128), nullable=false)
+    email=Column(String(100))
+    number=Column(String(12))
+    firstname=Column(String(50))
+    lastname=Column(String(50))
+    balance_id=Column(Integer, ForeignKey("admin_balances.id"))
+    balance = relationship("AdminBalance",back_populates="admins")
+    
 
 class User(BaseModel):
     __tablename__ = "users"

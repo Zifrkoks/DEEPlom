@@ -12,9 +12,9 @@ from dotenv import load_dotenv
 import requests
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker,joinedload
-
-from models import Base, Card, CartItem, Game, RestorePass, Transaction, TransactionPart, User
-from ViewModels import AddCard, AddFields, GameCreate, UserAuth, UserCreate
+from sqlalchemy.orm.exc import NoResultFound
+from models import Base, Card, CartItem, Game, RestorePass, Transaction, TransactionPart, User,Admin
+from ViewModels import AddCard, AddFields, GameCreate, UserAuth, UserCreate,AdminData
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
 from os.path import join, dirname
@@ -51,6 +51,7 @@ db = Session()
 service = Service()
 thread1 = threading.Thread(target=service.send_periodic_requests)
 thread1.start()
+
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
     try:
@@ -65,7 +66,6 @@ async def login(user_auth: UserAuth, response: Response):
         print(access_token)
     except BaseException as e:
         raise HTTPException(status_code=400, detail=f"{e}")
-
 
 @app.post("/api/register")
 def registration(user_create: UserCreate,response:Response):
@@ -86,6 +86,7 @@ def registration(user_create: UserCreate,response:Response):
         db.rollback()
         print(e)
         raise HTTPException(status_code=400, detail="User already exists")
+
 @app.get("/api/bought")
 def get_bought(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
@@ -97,7 +98,6 @@ def get_bought(credentials: JwtAuthorizationCredentials = Security(access_securi
     except BaseException as e:
         print(e)
         raise HTTPException(status_code=400, detail="User not found")
- 
 
 @app.post("/api/me")
 def add_fields_me(add_fields:AddFields,credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -127,7 +127,6 @@ def delete_me(credentials: JwtAuthorizationCredentials = Security(access_securit
         db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
-
 @app.get("/api/me")
 def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
@@ -139,7 +138,6 @@ def getMe(credentials: JwtAuthorizationCredentials = Security(access_security)):
     except BaseException as e:
         print(e)
         raise HTTPException(status_code=400, detail="User not found")
-
 
 @app.post("/api/restore_pass")
 def send_restore_pass(username:str):
@@ -211,8 +209,6 @@ def increase_balance(count:int,credentials: JwtAuthorizationCredentials = Securi
         db.rollback()
         raise HTTPException(status_code=400, detail="User not found")
 
-
-
 @app.post("/api/games/cart/{game_id}")
 def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
@@ -235,8 +231,6 @@ def add_to_cart(game_id:int, credentials: JwtAuthorizationCredentials = Security
 @app.get("/api/games/cart")
 def get_cart(credentials: JwtAuthorizationCredentials = Security(access_security)):
     games = db.query(Game).join(CartItem).filter(Game.id == CartItem.game_id).filter(CartItem.user_id == credentials.subject["user_id"]).all()
-    for game in games:
-            game.bin_url = ""
     return games
 
 @app.delete("/api/games/cart/{game_id}")
@@ -267,12 +261,12 @@ def buy(fullprice:int,credentials: JwtAuthorizationCredentials = Security(access
         service.add_to_transaction(user.id,item.id)
     db.add(tr)
     user.balance -= fullprice
+    db.query(CartItem).filter(CartItem.user_id == user.id).delete()
     db.commit()
     db.refresh(tr)
     service.set_transaction(tr.id)
     service.send_transaction_to_AI()
     return {"result": "buyed"}
-
 
 @app.put("/api/games/{game_id}")
 def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -289,10 +283,11 @@ def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorization
         db.commit()
         
         return {"message": "Game updated", "id": game.id}
-    except BaseException as e:
+    except A as e:
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
+
 @app.get("/api/discount")
 def setDiscountAll(discount:int):
     db.query(Game).update({Game.discount: discount})
@@ -301,11 +296,8 @@ def setDiscountAll(discount:int):
 @app.get("/api/games/{game_id}")
 def GetGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     game = db.query(Game).filter(Game.id == game_id).one()
-    game.bin_url = ""
     service.send_view_to_AI(credentials.subject["user_id"],game_id)
     return game
-
-
 
 @app.delete("/api/games/{game_id}")
 def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -325,8 +317,6 @@ def DeleteGame(game_id:int, credentials: JwtAuthorizationCredentials = Security(
 def getGames():
     try:
         games = db.query(Game).all()
-        for game in games:
-            game.bin_url = ""
         return games
     except BaseException as e:
         print(e)
@@ -352,6 +342,7 @@ def createGame(game_create:GameCreate,  credentials: JwtAuthorizationCredentials
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
+
 @app.post("/api/photo/{game_id}")
 def setPhoto(game_id:int, image:UploadFile, credentials: JwtAuthorizationCredentials = Security(access_security)):
     game = db.query(Game).filter(Game.id == game_id).one()
@@ -388,3 +379,95 @@ def recomendation(credentials: JwtAuthorizationCredentials = Security(access_sec
         return resp
     except BaseException as e:
         print(e)
+
+
+#//////////////////////////ADMINS/////////////////////////
+@app.post('/api/admin/login')
+def loginAdmin(user_auth: UserAuth, response: Response):
+    try:
+        admin = db.query(Admin).filter(Admin.username == user_auth.username).one()
+        if(user_auth.password !=admin.password):
+            raise HTTPException(status_code=400, detail="wrong password")
+        subject = {"admin_id":admin.id,"username":admin.username}
+        access_token = access_security.create_access_token(
+            subject=subject, expires_delta=timedelta(minutes=float(os.getenv("TOKEN_EXPIRES"))))
+        access_security.set_access_cookie(response, access_token)
+        print(access_token)
+        return {"access_token": access_token}
+    except NoResultFound as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="not found")
+    except BaseException as e:
+        raise HTTPException(status_code=400, detail=f"{e}")
+
+@app.post('/api/admin')
+def CreateAdmin(model:AdminData, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        admin = Admin()
+        admin.username = model.username
+        admin.password = model.password
+        admin.firstname = model.firstname
+        admin.lastname = model.lastname
+        admin.email = model.email
+        admin.number = model.number
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+    except BaseException as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+
+@app.get('/api/admin/{id}')
+def GetAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        admin = db.query(Admin).filter(Admin.id == id).one()
+        return admin
+    except NoResultFound as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="not found")
+    except BaseException as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+    
+@app.put('/api/admin/{id}')
+def UpdateAdmin(id:int,model:AdminData, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        admin = db.query(Admin).filter(Admin.id == id).one()
+        admin.username = model.username
+        admin.password = model.password
+        admin.firstname = model.firstname
+        admin.lastname = model.lastname
+        admin.email = model.email
+        admin.number = model.number
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+    except NoResultFound as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="not found")
+    except BaseException as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+@app.delete('/api/admin')
+def DeleteAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        admin = db.query(Admin).filter(Admin.id == id).one()
+        db.delete(admin)
+        db.commit()
+        return {"message": "admin deleted"}
+    except NoResultFound as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="not found")
+    except BaseException as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+
+

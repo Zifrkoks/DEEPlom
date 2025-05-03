@@ -65,3 +65,11 @@ class AddCard(BaseModel):
     cvv:str
     date:str
 
+class AdminData(BaseModel):
+    username:str
+    password:str
+    firstname:str
+    lastname:str
+    email:str
+    number:str
+
