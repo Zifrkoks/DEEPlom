@@ -98,8 +98,12 @@ class TransactionPart(BaseModel):
     transaction_id=Column(Integer,ForeignKey("transactions.id"),nullable=false)
     transaction=relationship("Transaction",back_populates="parts")
     user_id=Column(Integer, ForeignKey("users.id"))
+    date_buy=Column(DateTime(timezone=True), server_default=func.now())
     game = relationship("Game",back_populates="transuctions")
     user = relationship("User",back_populates="transuctions")
+    price = Column(Integer, nullable=false)
+    commission=Column(Integer, nullable=false)
+
 
 
 class Transaction(BaseModel):
@@ -111,3 +115,23 @@ class RestorePass(BaseModel):
     __tablename__="restores"
     username=Column(String(50), ForeignKey("users.username"),nullable=false)
     code=Column(String(6),nullable=false)
+
+
+
+def CreateAdmin(db):
+    try:
+        admin = Admin()
+        admin.username = "admin"
+        admin.password = "admin"
+        admin.firstname = "firstname"
+        admin.lastname = "lastname"
+        admin.email = "email@email.email"
+        admin.number = "88005553535"
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+        print("admin created")
+    except BaseException as e:
+        print("admin exist")
+
+

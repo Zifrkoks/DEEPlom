@@ -73,3 +73,10 @@ class AdminData(BaseModel):
     email:str
     number:str
 
+class GetHistoryModel(BaseModel):
+    from_year:int
+    from_month:int
+    from_day:int
+    to_year:int
+    to_month:int
+    to_day:int
