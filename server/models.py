@@ -132,6 +132,7 @@ def CreateAdmin(db):
         db.refresh(admin)
         print("admin created")
     except BaseException as e:
+        db.rollback()
         print("admin exist")
 
 

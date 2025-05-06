@@ -3,7 +3,7 @@ version: "3.8"
 services:
   mysql_db:
     container_name: db
-    image: mysql:8
+    image: mysql:latest
     restart: always
     ports:
       - "3307:3306"  # Порт для доступа с хоста
@@ -21,7 +21,16 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    restart: always
+    ports:
+    - "8087:80"
+    environment:
+      PMA_HOST: mysql_db
+      MYSQL_ROOT_PASSWORD: root
+    networks:
+     - app-network
   app:
     container_name: backend
     build: ./server

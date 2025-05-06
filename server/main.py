@@ -18,10 +18,10 @@ from ViewModels import AddCard, AddFields, GameCreate, GetHistoryModel, UserAuth
 from fastapi import FastAPI, HTTPException, Response, Security, UploadFile
 from fastapi.staticfiles import StaticFiles
 from os.path import join, dirname
-
+from dateutil.relativedelta import relativedelta
 from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
-
+from StatisticService import StatisticService
 from service import Service
 commission_service = 5
 dotenv_path = join(dirname(__file__), '.env')
@@ -64,7 +64,6 @@ async def login(user_auth: UserAuth, response: Response):
             subject=subject, expires_delta=timedelta(minutes=float(os.getenv("TOKEN_EXPIRES"))))
         access_security.set_access_cookie(response, access_token)
         return {"access_token": access_token}
-        print(access_token)
     except BaseException as e:
         raise HTTPException(status_code=400, detail=f"{e}")
 
@@ -403,6 +402,43 @@ async def loginAdmin(user_auth: UserAuth, response: Response):
         raise HTTPException(status_code=400, detail="not found")
     except BaseException as e:
         raise HTTPException(status_code=400, detail=f"{e}")
+@app.get('/api/admin/forecast')
+def GetForecast(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    sc = StatisticService(db)
+    return sc.ForecastNextYear()
+
+@app.post('/api/admin/statistic/alltime')
+def GetShopStatisticAllTime(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    all_sales =  db.query(TransactionPart).count()
+    on_price =  db.query(func.sum(TransactionPart.price)).scalar()
+    commission =  db.query(func.sum(TransactionPart.commission)).scalar()
+    return {"sales": all_sales, "sum": on_price,"commission": commission}
+
+@app.post('/api/admin/statistic')
+def GetShopStatistic(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Security(access_security)):
+    sc = StatisticService(db)
+    if(m.from_year != 0):
+        if(m.from_month != 0):
+            if(m.from_month > 12 or m.from_month < 1):
+                return {"message": "mouth must be from 1 to 12"}
+            if(m.from_day != 0):
+                if(m.from_day > 31 or m.from_day < 1):
+                    return {"message": "day must be from 1 to 31"}
+                start_date = datetime(m.from_year, m.from_month, m.from_day)
+                if m.to_year != 0 and m.to_month != 0 and m.to_day!= 0:
+                    end_date = datetime(m.to_year, m.to_month, m.to_day)
+                else:
+                    end_date = datetime(m.from_year, m.from_month, m.from_day) + relativedelta(days=1)
+            else:
+                start_date = datetime(m.from_year, m.from_month, 1)
+                end_date = datetime(m.from_year, m.from_month, 1) + relativedelta(months=1)
+        else:
+            start_date = datetime(m.from_year, 1, 1)
+            end_date = datetime(m.from_year, 1, 1)+ relativedelta(years=1)
+    else:             
+        return {"message": "year cant be 0"}
+    return sc.GetStatistic(start_date,end_date)
+
 
 @app.post('/api/admin')
 def CreateAdmin(model:AdminData, credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -417,11 +453,27 @@ def CreateAdmin(model:AdminData, credentials: JwtAuthorizationCredentials = Secu
         db.add(admin)
         db.commit()
         db.refresh(admin)
+        return {"message": "admin created"}
     except BaseException as e:
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
 
+@app.get('/api/admin/me')
+def GetMeAdmin( credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        admin_id = credentials.subject["user_id"]
+        admin = db.query(Admin).filter(Admin.id == admin_id).one()
+        return admin
+    except NoResultFound as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="not found")
+    except BaseException as e:
+        print(e)
+        db.rollback()
+        raise HTTPException(status_code=400, detail="model invalid")
+    
 @app.get('/api/admin/{id}')
 def GetAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
@@ -449,6 +501,7 @@ def UpdateAdmin(id:int,model:AdminData, credentials: JwtAuthorizationCredentials
         db.add(admin)
         db.commit()
         db.refresh(admin)
+        return {"message": "admin edited"}
     except NoResultFound as e:
         print(e)
         db.rollback()
@@ -473,74 +526,3 @@ def DeleteAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(acce
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
-
-@app.get('/api/admin/statistic/alltime')
-async def GetShopStatisticAllTime(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    all_sales = await db.query(TransactionPart).count()
-    on_price = await db.query(func.sum(TransactionPart.price)).scalar()
-    commission = await db.query(func.sum(TransactionPart.commission)).scalar()
-    return {"sales": all_sales, "sum": on_price,"commission": commission}
-
-@app.get('/api/admin/statistic')
-async def GetShopStatisticAllTime(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Security(access_security)):
-    if(m.from_year != 0):
-        if(m.from_month != 0):
-            if(m.from_month > 12 or m.from_month < 1):
-                return {"message": "mouth must be from 1 to 12"}
-            if(m.from_day != 0):
-                if(m.from_day > 31 or m.from_day < 1):
-                    return {"message": "day must be from 1 to 31"}
-                start_date = datetime(m.from_year, m.from_month, m.from_day)
-                if m.to_year != 0 and m.to_month != 0 and m.to_day!= 0:
-                    end_date = datetime(m.to_year, m.to_month, m.to_day)
-                else:
-                    end_date = datetime(m.from_year, m.from_month, m.from_day+1)
-            else:
-                start_date = datetime(m.from_year, m.from_month, 1)
-                end_date = datetime(m.from_year, m.from_month+1, 1)
-        else:
-            start_date = datetime(m.from_year, 1, 1)
-            end_date = datetime(m.from_year+1, 1, 1)
-    else:             
-        return {"message": "year cant be 0"}
-    all_sales = await db.query(TransactionPart
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).count()
-    on_price = await db.query(func.sum(TransactionPart.price)
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).scalar()
-    commission = await db.query(func.sum(TransactionPart.commission)
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).scalar()
-    return {"sales": all_sales, "sum": on_price,"commission":commission}
-
-@app.get('/api/admin/forecast/year')
-async def GetForecast(credentials: JwtAuthorizationCredentials = Security(access_security)):
-    start_date = datetime(datetime.now().year-1, datetime.now().month, datetime.now().day)
-    end_date = datetime(datetime.now().year, datetime.now().month, datetime.now().day)
-    all_sales = await db.query(TransactionPart
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).count()
-    on_price = await db.query(func.sum(TransactionPart.price)
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).scalar()
-    commission = await db.query(func.sum(TransactionPart.commission)
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).scalar()
-    return {"sales": all_sales, "sum": on_price,"commission":commission}
-
-
-@app.get('/api/admin/forecast/year')
-async def GetForecast(year:int,credentials: JwtAuthorizationCredentials = Security(access_security)):
-    start_date = datetime(year, 1, 1)
-    end_date = datetime(year+1, 1, 1)
-    all_sales = await db.query(TransactionPart
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).count()
-    on_price = await db.query(func.sum(TransactionPart.price)
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).scalar()
-    commission = await db.query(func.sum(TransactionPart.commission)
-    ).filter(and_(TransactionPart.date_buy >= start_date,
-    TransactionPart.date_buy < end_date)).scalar()
-    return {"sales": all_sales, "sum": on_price,"commission":commission}
