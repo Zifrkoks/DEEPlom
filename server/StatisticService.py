@@ -15,9 +15,18 @@ class StatisticService:
     def __init__(self,db:Session):
         self._db = db
 
+    def GetHistory(self, start_date:datetime,end_date:datetime):
+        all_sales =  self._db.query(TransactionPart
+        ).filter(and_(TransactionPart.date_buy >= start_date,
+        TransactionPart.date_buy < end_date)).all()
+        return {"sales": all_sales}
 
+    def GetUserHistory(self, start_date:datetime,end_date:datetime,userid:int):
+        all_sales =  self._db.query(TransactionPart
+        ).filter(TransactionPart.date_buy >= start_date &
+        TransactionPart.date_buy < end_date & TransactionPart.user_id == userid).all()
+        return {"sales": all_sales}
     
-
     def GetDayStatistic(self,model:datetime):
         start_date = datetime(model.year, model.month, model.day)
         end_date = datetime(model.year, model.month, model.day+1)

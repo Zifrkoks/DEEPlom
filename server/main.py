@@ -1,3 +1,4 @@
+import array
 from datetime import datetime, timedelta
 import email
 import json
@@ -7,6 +8,7 @@ import shutil
 import smtplib
 import string
 import threading
+from typing import List
 
 from dotenv import load_dotenv
 import requests
@@ -23,7 +25,7 @@ from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
 from StatisticService import StatisticService
 from service import Service
-commission_service = 5
+
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv()
 app = FastAPI()
@@ -51,8 +53,7 @@ CreateAdmin(db)
 service = Service()
 thread1 = threading.Thread(target=service.send_periodic_requests)
 thread1.start()
-
-    
+# service.genUsersAndBuyes(db)
 @app.post('/api/login')
 async def login(user_auth: UserAuth, response: Response):
     try:
@@ -98,6 +99,19 @@ def get_bought(credentials: JwtAuthorizationCredentials = Security(access_securi
     except BaseException as e:
         print(e)
         raise HTTPException(status_code=400, detail="User not found")
+
+@app.get("/api/allbought")
+def get_bought(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    try:
+        print(credentials.subject)
+        user_id = credentials.subject["user_id"]
+        results = (db.query(Game, TransactionPart.user_id).join(TransactionPart, Game.id == TransactionPart.game_id).all())
+
+        return results
+    except BaseException as e:
+        print(e)
+        raise HTTPException(status_code=400, detail="User not found")
+
 
 @app.post("/api/me")
 def add_fields_me(add_fields:AddFields,credentials: JwtAuthorizationCredentials = Security(access_security)):
@@ -255,7 +269,7 @@ def buy(fullprice:int,credentials: JwtAuthorizationCredentials = Security(access
         item.sales+=1
         part = TransactionPart()
         part.price = item.price - (item.discount*item.price/100)
-        part.commission = part.price*commission_service/100
+        part.commission = part.price*service.commission_service/100
         part.game = item
         part.user = user
         part.transaction_id = tr.id
@@ -285,7 +299,7 @@ def UpdateGame(game_id:int,game_create:GameCreate, credentials: JwtAuthorization
         db.commit()
         
         return {"message": "Game updated", "id": game.id}
-    except A as e:
+    except BaseException as e:
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
@@ -404,11 +418,15 @@ async def loginAdmin(user_auth: UserAuth, response: Response):
         raise HTTPException(status_code=400, detail=f"{e}")
 @app.get('/api/admin/forecast')
 def GetForecast(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    if(credentials.subject["role"] != "admin"):
+        raise HTTPException(status_code=400, detail="you are not admin")
     sc = StatisticService(db)
     return sc.ForecastNextYear()
 
 @app.post('/api/admin/statistic/alltime')
 def GetShopStatisticAllTime(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    if(credentials.subject["role"] != "admin"):
+        raise HTTPException(status_code=400, detail="you are not admin")
     all_sales =  db.query(TransactionPart).count()
     on_price =  db.query(func.sum(TransactionPart.price)).scalar()
     commission =  db.query(func.sum(TransactionPart.commission)).scalar()
@@ -416,6 +434,8 @@ def GetShopStatisticAllTime(credentials: JwtAuthorizationCredentials = Security(
 
 @app.post('/api/admin/statistic')
 def GetShopStatistic(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Security(access_security)):
+    if(credentials.subject["role"] != "admin"):
+        raise HTTPException(status_code=400, detail="you are not admin")
     sc = StatisticService(db)
     if(m.from_year != 0):
         if(m.from_month != 0):
@@ -439,10 +459,46 @@ def GetShopStatistic(m:GetHistoryModel,credentials: JwtAuthorizationCredentials 
         return {"message": "year cant be 0"}
     return sc.GetStatistic(start_date,end_date)
 
+@app.post('/api/admin/history')
+def GetHistory(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Security(access_security)):
+    if(credentials.subject["role"] != "admin"):
+        raise HTTPException(status_code=400, detail="you are not admin")
+    sc = StatisticService(db)
+    if(m.from_year != 0):
+        if(m.from_month != 0):
+            if(m.from_month > 12 or m.from_month < 1):
+                return {"message": "mouth must be from 1 to 12"}
+            if(m.from_day != 0):
+                if(m.from_day > 31 or m.from_day < 1):
+                    return {"message": "day must be from 1 to 31"}
+                start_date = datetime(m.from_year, m.from_month, m.from_day)
+                if m.to_year != 0 and m.to_month != 0 and m.to_day!= 0:
+                    end_date = datetime(m.to_year, m.to_month, m.to_day)
+                else:
+                    end_date = datetime(m.from_year, m.from_month, m.from_day) + relativedelta(days=1)
+            else:
+                start_date = datetime(m.from_year, m.from_month, 1)
+                end_date = datetime(m.from_year, m.from_month, 1) + relativedelta(months=1)
+        else:
+            start_date = datetime(m.from_year, 1, 1)
+            end_date = datetime(m.from_year, 1, 1)+ relativedelta(years=1)
+    else:             
+        return {"message": "year cant be 0"}
+    return sc.GetHistory(start_date,end_date)
+
+@app.post('/api/admin/users')
+def GetUsers(credentials: JwtAuthorizationCredentials = Security(access_security)):
+    if(credentials.subject["role"] != "admin"):
+        raise HTTPException(status_code=400, detail="you are not admin")
+    users = db.query(User).all()
+    return {"users": users}
+
 
 @app.post('/api/admin')
 def CreateAdmin(model:AdminData, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+        if(credentials.subject["role"] != "admin"):
+            raise HTTPException(status_code=400, detail="you are not admin")
         admin = Admin()
         admin.username = model.username
         admin.password = model.password
@@ -462,6 +518,8 @@ def CreateAdmin(model:AdminData, credentials: JwtAuthorizationCredentials = Secu
 @app.get('/api/admin/me')
 def GetMeAdmin( credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+        if(credentials.subject["role"] != "admin"):
+            raise HTTPException(status_code=400, detail="you are not admin")
         admin_id = credentials.subject["user_id"]
         admin = db.query(Admin).filter(Admin.id == admin_id).one()
         return admin
@@ -477,6 +535,8 @@ def GetMeAdmin( credentials: JwtAuthorizationCredentials = Security(access_secur
 @app.get('/api/admin/{id}')
 def GetAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+        if(credentials.subject["role"] != "admin"):
+            raise HTTPException(status_code=400, detail="you are not admin")
         admin = db.query(Admin).filter(Admin.id == id).one()
         return admin
     except NoResultFound as e:
@@ -491,6 +551,8 @@ def GetAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(access_
 @app.put('/api/admin/{id}')
 def UpdateAdmin(id:int,model:AdminData, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+        if(credentials.subject["role"] != "admin"):
+            raise HTTPException(status_code=400, detail="you are not admin")
         admin = db.query(Admin).filter(Admin.id == id).one()
         admin.username = model.username
         admin.password = model.password
@@ -514,6 +576,8 @@ def UpdateAdmin(id:int,model:AdminData, credentials: JwtAuthorizationCredentials
 @app.delete('/api/admin/{id}')
 def DeleteAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
+        if(credentials.subject["role"] != "admin"):
+            raise HTTPException(status_code=400, detail="you are not admin")
         admin = db.query(Admin).filter(Admin.id == id).one()
         db.delete(admin)
         db.commit()
@@ -526,3 +590,4 @@ def DeleteAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(acce
         print(e)
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
+
