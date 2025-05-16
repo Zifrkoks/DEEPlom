@@ -13,3 +13,6 @@ authlib
 pymysql
 pandas
 scikit-learn
+lightfm==1.16
+numpy==1.23.5
+scipy==1.9.3

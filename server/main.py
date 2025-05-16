@@ -8,7 +8,14 @@ import shutil
 import smtplib
 import string
 import threading
-from typing import List
+from typing import List, Optional
+import pandas as pd
+import numpy as np
+from scipy.sparse import coo_matrix
+from lightfm import LightFM
+import pickle
+from collections import Counter
+
 
 from dotenv import load_dotenv
 import requests
@@ -25,6 +32,8 @@ from fastapi_jwt import JwtAuthorizationCredentials, JwtAccessBearer
 from fastapi.middleware.cors import CORSMiddleware
 from StatisticService import StatisticService
 from service import Service
+
+
 
 dotenv_path = join(dirname(__file__), '.env')
 load_dotenv()
@@ -43,7 +52,7 @@ if not os.path.exists('bins'):
 access_security = JwtAccessBearer(
     secret_key=os.getenv("JWT_SECRET"), auto_error=True)
 
-conn = f"mysql+pymysql://{os.getenv("DB_USER")}:{os.getenv("DB_PASS")}@{os.getenv("DB_HOST")}/{os.getenv("DB")}"
+conn = f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PASS')}@{os.getenv('DB_HOST')}/{os.getenv('DB')}"
 print(conn)
 engine = create_engine(conn)
 Base.metadata.create_all(engine)
@@ -51,6 +60,119 @@ Session = sessionmaker(bind=engine)
 db = Session()
 CreateAdmin(db)
 service = Service()
+# 📁 Пути
+MODEL_PATH = "lightfm_model.pkl"
+
+# 🎮 Получение первичных данных при перезапуске или первом старте
+sc = StatisticService(db)
+history = sc.GetHistory(datetime(2021, 1, 1),datetime(2030, 1, 1))
+result_orders = []
+if len(history['sales']) < 1:
+    result_orders = [
+    {"game_id": 1, "user_id": 1, "price": 100},
+    {"game_id": 5, "user_id": 2, "price": 100},
+    {"game_id": 3, "user_id": 2, "price": 100},
+    {"game_id": 1, "user_id": 2, "price": 100},
+    {"game_id": 2, "user_id": 2, "price": 100}
+    ]
+else:
+    for sale in history['sales']:
+        print(sale)
+        result_orders.append({"game_id":sale.game_id, "user_id":sale.user_id, "price":sale.price})
+
+df = pd.DataFrame(result_orders)
+
+# 👥 Маппим user_id и game_id в индексы
+def build_id_maps(df):
+    user_ids = df['user_id'].unique().tolist()
+    game_ids = df['game_id'].unique().tolist()
+    user_id_map = {uid: idx for idx, uid in enumerate(user_ids)}
+    game_id_map = {gid: idx for idx, gid in enumerate(game_ids)}
+    return user_id_map, game_id_map
+
+user_id_map, game_id_map = build_id_maps(df)
+
+# 🧱 Создаем interaction matrix
+def create_interaction_matrix(df, user_id_map, game_id_map):
+    rows = df['user_id'].map(user_id_map).values
+    cols = df['game_id'].map(game_id_map).values
+    data = np.ones(len(df))
+    return coo_matrix((data, (rows, cols)), shape=(len(user_id_map), len(game_id_map)))
+
+interactions = create_interaction_matrix(df, user_id_map, game_id_map)
+
+# 🚀 Загружаем или создаем модель
+def load_or_train_model(interactions, retrain=False):
+    if not os.path.exists(MODEL_PATH) or retrain:
+        model = LightFM(no_components=10, loss='warp')
+        model.fit(interactions, epochs=10, num_threads=2)
+        with open(MODEL_PATH, 'wb') as f:
+            pickle.dump(model, f)
+        print("✅ Модель обучена заново")
+    else:
+        with open(MODEL_PATH, 'rb') as f:
+            model = pickle.load(f)
+        print("📥 Модель загружена")
+    return model
+
+model = load_or_train_model(interactions)
+
+def recommend_games(user_id, model, user_id_map, game_id_map, df, top_n=5):
+    """
+    Рекомендует игры, которые пользователь еще не покупал
+    
+    Аргументы:
+        user_id: ID пользователя
+        model: обученная модель LightFM
+        user_id_map: словарь маппинга user_id в индексы
+        game_id_map: словарь маппинга game_id в индексы
+        df: DataFrame с историей покупок
+        top_n: количество рекомендаций
+    
+    Возвращает:
+        Список рекомендованных game_id
+    """
+    if user_id not in user_id_map:
+        print("Пользователь новый, нет данных")
+        return []
+
+    # Получаем все игры, которые пользователь уже покупал
+    bought_games = df[df['user_id'] == user_id]['game_id'].unique()
+    
+    user_idx = user_id_map[user_id]
+    scores = model.predict(user_idx, np.arange(len(game_id_map)))
+    
+    # Создаем маску для исключения купленных игр
+    reverse_game_map = {v: k for k, v in game_id_map.items()}
+    all_games = [reverse_game_map[i] for i in range(len(game_id_map))]
+    mask = [game_id not in bought_games for game_id in all_games]
+    
+    # Применяем маску и сортируем
+    filtered_scores = scores[mask]
+    filtered_games = np.array(all_games)[mask]
+    top_items = filtered_games[np.argsort(-filtered_scores)[:top_n]]
+    
+    return list([int(top_item) for top_item in top_items ])
+
+def update_model_with_new_sales(all_sales, user_id_map, game_id_map):
+    global model
+    df_new = pd.DataFrame(all_sales)
+
+    # Обновляем мапы
+    user_id_map, game_id_map = build_id_maps(df_new)
+    interactions = create_interaction_matrix(df_new, user_id_map, game_id_map)
+
+    # ❗ Полное переобучение — так как изменились размеры матрицы
+    model = LightFM(no_components=10, loss='warp')
+    model.fit(interactions, epochs=10, num_threads=2)
+
+    # Сохраняем
+    with open(MODEL_PATH, 'wb') as f:
+        pickle.dump(model, f)
+
+    print("🔁 Модель переобучена с новыми пользователями/играми")
+
+
 thread1 = threading.Thread(target=service.send_periodic_requests)
 thread1.start()
 # service.genUsersAndBuyes(db)
@@ -163,7 +285,7 @@ def send_restore_pass(username:str):
         restore = RestorePass()
         restore.code = random_string
         restore.username = username
-        lines = [f"From: {os.getenv("EMAIL_NAME")}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
+        lines = [f"From: {os.getenv('EMAIL_NAME')}", f"To: {', '.join(user.email)}", "",f"your code:{random_string}"]
         msg = "\r\n".join(lines)
         smtpObj = smtplib.SMTP('smtp.gmail.com', 587)
         smtpObj.starttls()
@@ -388,7 +510,7 @@ def setExe(game_id:int, bins:UploadFile, credentials: JwtAuthorizationCredential
 @app.post("/api/recomendation")
 def recomendation(credentials: JwtAuthorizationCredentials = Security(access_security)):
     try:
-        to = f"http://{os.getenv("MODEL_SERVICE")}/recommendation"
+        to = f"http://{os.getenv('MODEL_SERVICE')}/recommendation"
         print(to)
         resp = requests.get(to,params={"user_id":credentials.subject["user_id"]})
         print(resp.text)
@@ -434,8 +556,6 @@ def GetShopStatisticAllTime(credentials: JwtAuthorizationCredentials = Security(
 
 @app.post('/api/admin/statistic')
 def GetShopStatistic(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Security(access_security)):
-    if(credentials.subject["role"] != "admin"):
-        raise HTTPException(status_code=400, detail="you are not admin")
     sc = StatisticService(db)
     if(m.from_year != 0):
         if(m.from_month != 0):
@@ -461,8 +581,6 @@ def GetShopStatistic(m:GetHistoryModel,credentials: JwtAuthorizationCredentials 
 
 @app.post('/api/admin/history')
 def GetHistory(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Security(access_security)):
-    if(credentials.subject["role"] != "admin"):
-        raise HTTPException(status_code=400, detail="you are not admin")
     sc = StatisticService(db)
     if(m.from_year != 0):
         if(m.from_month != 0):
@@ -481,7 +599,8 @@ def GetHistory(m:GetHistoryModel,credentials: JwtAuthorizationCredentials = Secu
                 end_date = datetime(m.from_year, m.from_month, 1) + relativedelta(months=1)
         else:
             start_date = datetime(m.from_year, 1, 1)
-            end_date = datetime(m.from_year, 1, 1)+ relativedelta(years=1)
+            end_date = datetime(m.from_year, 1, 1) + relativedelta(years=1)
+            print(start_date, end_date) 
     else:             
         return {"message": "year cant be 0"}
     return sc.GetHistory(start_date,end_date)
@@ -591,3 +710,57 @@ def DeleteAdmin(id:int, credentials: JwtAuthorizationCredentials = Security(acce
         db.rollback()
         raise HTTPException(status_code=400, detail="model invalid")
 
+@app.get('/api/recommend/{user_id}')
+async def getRecommendations(user_id: Optional[int]):
+    global model
+    sc = StatisticService(db)
+    history = sc.GetHistory(datetime(2021, 1, 1),datetime(2030, 1, 1))
+    result = []
+    if user_id:
+        
+        result_orders = []
+        if len(history['sales']) < 1:
+            result_orders = [
+            {"game_id": 1, "user_id": 1, "price": 100},
+            {"game_id": 5, "user_id": 2, "price": 100},
+            {"game_id": 3, "user_id": 2, "price": 100},
+            {"game_id": 1, "user_id": 2, "price": 100},
+            {"game_id": 2, "user_id": 2, "price": 100}
+            ]
+        else:
+            for sale in history['sales']:
+                result_orders.append({"game_id":sale.game_id, "user_id":sale.user_id, "price":sale.price})
+        df = pd.DataFrame(result_orders)
+        user_id_map, game_id_map = build_id_maps(df)
+        update_model_with_new_sales(result_orders, user_id_map, game_id_map)
+        result = recommend_games(user_id, model, user_id_map, game_id_map, df, 3)
+        
+    else:
+        sales = history['sales']
+        # Считаем количество продаж по game_id
+        game_counter = Counter(sale.game_id for sale in sales)
+        # Получаем топ-3 самых продаваемых игр
+        top_3_games = game_counter.most_common(3)
+        return [db.query(Game).filter(Game.id == top_game[0]).one() for top_game in top_3_games]
+
+    if len(result) != 0:
+        games = []
+        for game_id in result:
+            game = db.query(Game).filter(Game.id == game_id).one()
+            games.append(game)
+        return games
+    
+    if not result:
+        sales = history['sales']
+        # Считаем количество продаж по game_id
+        game_counter = Counter(sale.game_id for sale in sales)
+        # Получаем топ-3 самых продаваемых игр
+        top_3_games = game_counter.most_common(3)
+        
+        return [db.query(Game).filter(Game.id == top_game[0]).one() for top_game in top_3_games]
+            
+    
+
+
+
+    

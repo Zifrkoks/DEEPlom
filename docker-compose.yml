@@ -52,22 +52,6 @@ services:
       - EMAIL_PASS=giqj zllu eajt jtwy
     networks:
       - app-network
-
-  app_ml:
-    container_name: skill_app_diplom
-    image: app_diplom
-    build: 
-      context: ./ai
-      dockerfile: Dockerfile
-    volumes:
-      - logs:/usr/local/app_ml/logs
-      - models:/usr/local/app_ml/models
-      - dataset:/usr/local/app_ml/dataset
-    restart: always
-    ports:
-      - 8016:8016
-    networks:
-      - app-network
     
 volumes:
   logs: { }

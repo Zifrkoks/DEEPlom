@@ -77,7 +77,7 @@ class Service:
             try:
                 datas = json.dumps({"Data": self.arr})
                 print(f"[{datetime.now()}] Отправка запроса...")
-                response = requests.post(f"http://{os.getenv("MODEL_SERVICE")}/model_train/",data=datas).json()
+                response = requests.post(f"http://{os.getenv('MODEL_SERVICE')}/model_train/",data=datas).json()
                 print(f"Результат: HTTP {response.status_code}")
                 
             except Exception as e:
